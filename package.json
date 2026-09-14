@@ -1,0 +1,23 @@
+{
+  "name": "mazevos",
+  "version": "1.0.0",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test \"src/**/*.test.js\""
+  },
+  "devDependencies": {
+    "supabase": "^2.110.0",
+    "vite": "^8.1.1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.8"
+  }
+}

@@ -1,0 +1,102 @@
+/*
+ * Design tokens for the journal's visual language. This file is the only place
+ * the palette, type scale, and shape values are written down. Everything in
+ * style.css reads from here — no raw hex below this file.
+ */
+:root {
+  /* Tells the browser which way to render what it draws itself: the select
+     popup, the datetime picker, the native checkbox, the scrollbar gutter.
+     Without it those stay light while the app is dark — the date picker in the
+     log form being the one you notice. */
+  color-scheme: dark;
+
+  /* Neutrals: near-black background, two surface levels above it. */
+  --bg: #0a0a0b;
+  --surface: #111113;
+  --surface2: #18181b;
+  --border: #2a2a2e;
+  --border2: #3a3a3f;
+
+  --text: #f0f0f2;
+  --text2: #888890;
+  --text3: #555560;
+
+  /* Semantic. Each colour has a -bg for filled badges and a -dim for borders. */
+  --green: #22c55e;
+  --green-dim: #16532e;
+  --green-bg: #0d2b1a;
+  --red: #ef4444;
+  --red-dim: #7f1d1d;
+  --red-bg: #2a0d0d;
+  --amber: #f59e0b;
+  --amber-bg: #2a1f06;
+  --blue: #3b82f6;
+  --blue-bg: #0d1a2e;
+  --purple: #a78bfa;
+  --purple-bg: #1a1230;
+
+  /* Accent is green: primary buttons, active links, sync dot. */
+  --accent: #22c55e;
+  --accent-hover: #16a34a;
+  --on-accent: #0a0a0b;
+
+  --font: 'Syne', sans-serif;
+  --mono: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Scrims. Anything that sits over content rather than beside it. */
+  --overlay: rgba(0, 0, 0, 0.75);
+  --scrim: rgba(0, 0, 0, 0.7);
+  --tip-bg: rgba(17, 17, 19, 0.94);
+
+  /* Flat by design — borders carry every edge, nothing casts a shadow. */
+  --transition: 0.15s;
+}
+
+/*
+ * Light theme. Only the tokens change — no rule in style.css is aware there is
+ * more than one palette, which is the whole reason every colour lives here.
+ *
+ * Not a straight inversion. The semantic colours are darkened rather than
+ * reused, because #22c55e on white is legible as a badge but not as text, and a
+ * P&L column that is hard to read is a real cost in a journal. The -bg tints
+ * become pale washes for the same reason: on a light surface a filled badge
+ * needs the tint behind dark text, not light text on a dark tint.
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f6f6f7;
+  --surface: #ffffff;
+  --surface2: #f0f0f2;
+  --border: #e0e0e4;
+  --border2: #c8c8d0;
+
+  --text: #16161a;
+  --text2: #62626c;
+  --text3: #90909c;
+
+  --green: #15803d;
+  --green-dim: #86efac;
+  --green-bg: #dcfce7;
+  --red: #b91c1c;
+  --red-dim: #fca5a5;
+  --red-bg: #fee2e2;
+  --amber: #b45309;
+  --amber-bg: #fef3c7;
+  --blue: #1d4ed8;
+  --blue-bg: #dbeafe;
+  --purple: #6d28d9;
+  --purple-bg: #ede9fe;
+
+  --accent: #15803d;
+  --accent-hover: #166534;
+  --on-accent: #ffffff;
+
+  --overlay: rgba(30, 30, 35, 0.4);
+  --scrim: rgba(30, 30, 35, 0.35);
+  --tip-bg: rgba(255, 255, 255, 0.97);
+}

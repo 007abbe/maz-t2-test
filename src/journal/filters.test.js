@@ -1,0 +1,285 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  applyFilters, byAccount, byScope, tradeLabel, NO_FILTERS, UNASSIGNED, SCOPES,
+} from './filters.js'
+
+const trade = (over = {}) => ({
+  num: 1,
+  date: '2026-07-01T09:30',
+  direction: 'Long',
+  status: 'TP',
+  pnl: 100,
+  thesis: '',
+  ...over,
+})
+
+test('no filters returns everything, newest first', () => {
+  const rows = [
+    trade({ num: 1, date: '2026-07-01T09:30' }),
+    trade({ num: 2, date: '2026-07-03T09:30' }),
+    trade({ num: 3, date: '2026-07-02T09:30' }),
+  ]
+  assert.deepEqual(
+    applyFilters(rows, NO_FILTERS).map((t) => t.num),
+    [2, 3, 1]
+  )
+})
+
+test('does not mutate the input array', () => {
+  const rows = [trade({ num: 1, date: '2026-07-01T09:30' }), trade({ num: 2, date: '2026-07-09T09:30' })]
+  applyFilters(rows, { sort: 'pnl-low' })
+  assert.deepEqual(rows.map((t) => t.num), [1, 2])
+})
+
+test('status and direction narrow independently', () => {
+  const rows = [
+    trade({ num: 1, status: 'TP', direction: 'Long' }),
+    trade({ num: 2, status: 'SL', direction: 'Long' }),
+    trade({ num: 3, status: 'TP', direction: 'Short' }),
+  ]
+  assert.deepEqual(applyFilters(rows, { status: 'TP' }).map((t) => t.num).sort(), [1, 3])
+  assert.deepEqual(applyFilters(rows, { direction: 'Short' }).map((t) => t.num), [3])
+})
+
+test('filters combine rather than replace each other', () => {
+  const rows = [
+    trade({ num: 1, status: 'TP', direction: 'Long' }),
+    trade({ num: 2, status: 'TP', direction: 'Short' }),
+    trade({ num: 3, status: 'SL', direction: 'Short' }),
+  ]
+  assert.deepEqual(
+    applyFilters(rows, { status: 'TP', direction: 'Short' }).map((t) => t.num),
+    [2]
+  )
+})
+
+test('search matches thesis text, case-insensitively', () => {
+  const rows = [
+    trade({ num: 1, thesis: 'Price went off a weekly LEDGE' }),
+    trade({ num: 2, thesis: 'callwall barrier' }),
+  ]
+  assert.deepEqual(applyFilters(rows, { search: 'ledge' }).map((t) => t.num), [1])
+})
+
+test('search matches the composed trade label', () => {
+  const rows = [trade({ num: 46 }), trade({ num: 12 })]
+
+  assert.equal(tradeLabel(rows[0], 'MNQ'), 'MNQ #46')
+  assert.equal(tradeLabel(rows[0]), '#46', 'no configured instrument, no prefix')
+
+  // The instrument travels with the filters, because search has to match what
+  // the table renders.
+  assert.deepEqual(
+    applyFilters(rows, { search: 'mnq #46', instrument: 'MNQ' }).map((t) => t.num),
+    [46]
+  )
+})
+
+test('search finds a trade by number whatever the instrument', () => {
+  // Typing "#46" is what a trader actually does, and it must not depend on
+  // whether they configured a ticker or on remembering which one.
+  const rows = [trade({ num: 46 }), trade({ num: 12 })]
+
+  assert.deepEqual(applyFilters(rows, { search: '#46' }).map((t) => t.num), [46])
+  assert.deepEqual(
+    applyFilters(rows, { search: '#46', instrument: 'MNQ' }).map((t) => t.num),
+    [46]
+  )
+})
+
+test('search tolerates a missing thesis', () => {
+  const rows = [trade({ num: 1, thesis: null }), trade({ num: 2, thesis: undefined })]
+  assert.deepEqual(applyFilters(rows, { search: 'anything' }), [])
+  assert.equal(applyFilters(rows, { search: '#', instrument: 'MNQ' }).length, 2)
+})
+
+test('blank search is not a filter', () => {
+  const rows = [trade({ num: 1, thesis: '' })]
+  assert.equal(applyFilters(rows, { search: '   ' }).length, 1)
+})
+
+test('sorts by pnl in both directions', () => {
+  const rows = [trade({ num: 1, pnl: -50 }), trade({ num: 2, pnl: 200 }), trade({ num: 3, pnl: 0 })]
+  assert.deepEqual(applyFilters(rows, { sort: 'pnl-high' }).map((t) => t.num), [2, 3, 1])
+  assert.deepEqual(applyFilters(rows, { sort: 'pnl-low' }).map((t) => t.num), [1, 3, 2])
+})
+
+test('oldest first reverses the default order', () => {
+  const rows = [
+    trade({ num: 1, date: '2026-07-05T09:30' }),
+    trade({ num: 2, date: '2026-07-01T09:30' }),
+  ]
+  assert.deepEqual(applyFilters(rows, { sort: 'oldest' }).map((t) => t.num), [2, 1])
+})
+
+test('an unknown sort falls back to newest rather than throwing', () => {
+  const rows = [
+    trade({ num: 1, date: '2026-07-01T09:30' }),
+    trade({ num: 2, date: '2026-07-08T09:30' }),
+  ]
+  assert.deepEqual(applyFilters(rows, { sort: 'bogus' }).map((t) => t.num), [2, 1])
+})
+
+test('rows with no date sort last without crashing', () => {
+  const rows = [trade({ num: 1, date: null }), trade({ num: 2, date: '2026-07-01T09:30' })]
+  assert.deepEqual(applyFilters(rows, { sort: 'newest' }).map((t) => t.num), [2, 1])
+})
+
+const accountRows = () => [
+  trade({ num: 1, account_id: 'a' }),
+  trade({ num: 2, account_id: 'b' }),
+  trade({ num: 3, account_id: null }),
+]
+
+test('byAccount narrows to one account', () => {
+  assert.deepEqual(byAccount(accountRows(), 'a').map((t) => t.num), [1])
+})
+
+test('an empty account is not a filter', () => {
+  assert.equal(byAccount(accountRows(), '').length, 3)
+  assert.equal(byAccount(accountRows(), undefined).length, 3)
+})
+
+test('the unassigned sentinel selects trades with no account', () => {
+  assert.deepEqual(byAccount(accountRows(), UNASSIGNED).map((t) => t.num), [3])
+})
+
+test('an account with nothing on it yields nothing, not everything', () => {
+  assert.deepEqual(byAccount(accountRows(), 'deleted-id'), [])
+})
+
+test('the account filter combines with the others', () => {
+  const rows = [
+    trade({ num: 1, account_id: 'a', status: 'TP' }),
+    trade({ num: 2, account_id: 'a', status: 'SL' }),
+    trade({ num: 3, account_id: 'b', status: 'TP' }),
+  ]
+  assert.deepEqual(
+    applyFilters(rows, { account: 'a', status: 'TP' }).map((t) => t.num),
+    [1]
+  )
+})
+
+test('NO_FILTERS leaves every account visible', () => {
+  assert.equal(applyFilters(accountRows(), NO_FILTERS).length, 3)
+})
+
+/* ---- Scope: which of the two journals a trade belongs to ---- */
+
+const BACKTEST = new Set(['bt1', 'bt2'])
+
+const scopeRows = () => [
+  trade({ num: 1, account_id: 'live1' }),
+  trade({ num: 2, account_id: 'bt1' }),
+  trade({ num: 3, account_id: null }),
+  trade({ num: 4, account_id: 'bt2' }),
+]
+
+test('the backtest journal shows only trades on backtest accounts', () => {
+  assert.deepEqual(
+    byScope(scopeRows(), SCOPES.BACKTEST, BACKTEST).map((t) => t.num),
+    [2, 4]
+  )
+})
+
+test('unassigned trades are the live journal’s, never the backtest one’s', () => {
+  // All 57 pre-accounts rows are unassigned. Defaulting them into the backtest
+  // would delete real P&L from the live tiles.
+  assert.deepEqual(
+    byScope(scopeRows(), SCOPES.LIVE, BACKTEST).map((t) => t.num),
+    [1, 3]
+  )
+})
+
+test('the two scopes partition the journal with no overlap and no loss', () => {
+  const rows = scopeRows()
+  const live = byScope(rows, SCOPES.LIVE, BACKTEST)
+  const backtest = byScope(rows, SCOPES.BACKTEST, BACKTEST)
+
+  assert.equal(live.length + backtest.length, rows.length)
+  assert.equal(live.filter((t) => backtest.includes(t)).length, 0)
+})
+
+test('with no backtest accounts every trade is live', () => {
+  assert.equal(byScope(scopeRows(), SCOPES.BACKTEST, new Set()).length, 0)
+  assert.equal(byScope(scopeRows(), SCOPES.LIVE, new Set()).length, 4)
+})
+
+/* ---- Kind: trades, vetoes, or both ---- */
+
+const kindRows = () => [
+  trade({ num: 1, kind: 'trade' }),
+  trade({ num: 2, kind: 'veto', status: null }),
+  trade({ num: 3, kind: null }), // logged before vetoes existed
+]
+
+test('no kind filter shows trades and vetoes together', () => {
+  assert.equal(applyFilters(kindRows(), { kind: '' }).length, 3)
+})
+
+test('trades only keeps the rows with no kind — those are trades', () => {
+  assert.deepEqual(
+    applyFilters(kindRows(), { kind: 'trade' }).map((t) => t.num),
+    [1, 3]
+  )
+})
+
+test('vetoes only narrows to the passed-on ideas', () => {
+  assert.deepEqual(
+    applyFilters(kindRows(), { kind: 'veto' }).map((t) => t.num),
+    [2]
+  )
+})
+
+test('the kind filter combines with the account filter', () => {
+  const rows = [
+    trade({ num: 1, account_id: 'a', kind: 'veto' }),
+    trade({ num: 2, account_id: 'a', kind: 'trade' }),
+    trade({ num: 3, account_id: 'b', kind: 'veto' }),
+  ]
+  assert.deepEqual(
+    applyFilters(rows, { account: 'a', kind: 'veto' }).map((t) => t.num),
+    [1]
+  )
+})
+
+// --- the archive ----------------------------------------------------------
+
+test('the table hides archived trades by default', () => {
+  const rows = [
+    trade({ num: 1 }),
+    trade({ num: 2, archived: true }),
+    trade({ num: 3, archived: true }),
+  ]
+
+  assert.deepEqual(applyFilters(rows).map((t) => t.num), [1])
+})
+
+test('archived trades can be listed on their own, or alongside', () => {
+  const rows = [trade({ num: 1 }), trade({ num: 2, archived: true })]
+
+  assert.deepEqual(
+    applyFilters(rows, { archived: 'archived' }).map((t) => t.num),
+    [2]
+  )
+  assert.equal(applyFilters(rows, { archived: 'all' }).length, 2)
+})
+
+test('the archive filter combines with the others rather than overriding them', () => {
+  const rows = [
+    trade({ num: 1, status: 'TP', archived: true }),
+    trade({ num: 2, status: 'SL', archived: true }),
+  ]
+
+  assert.deepEqual(
+    applyFilters(rows, { archived: 'archived', status: 'TP' }).map((t) => t.num),
+    [1]
+  )
+})
+
+test('a trade with no archived flag at all counts as active', () => {
+  // Every row written before the column existed reads as undefined here, and a
+  // journal that hid them by default would look like it had lost its history.
+  assert.equal(applyFilters([{ num: 1, date: '2026-07-01T09:30' }]).length, 1)
+})
